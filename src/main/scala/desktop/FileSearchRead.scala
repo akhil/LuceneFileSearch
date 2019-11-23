@@ -13,9 +13,8 @@ import org.apache.lucene.store.FSDirectory
 object FileSearchRead {
 
   //val keyWord = "java AND spring"
-
   private val default = FileSystems.getDefault
-  private val path = default.getPath("/lucene")
+  private val path = default.getPath(SearchConfig.INDEX_PATH)
   private val directory = FSDirectory.open(path)
   private val directoryReader = DirectoryReader.open(directory)
   private val indexSearcher = new IndexSearcher(directoryReader)

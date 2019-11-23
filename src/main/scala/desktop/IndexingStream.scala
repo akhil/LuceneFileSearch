@@ -47,6 +47,8 @@ object IndexingStream {
       .runWith(Sink.foreach(() => _))
       .onComplete {
         case Success(_) =>
+          indexWriter.flush()
+          indexWriter.commit()
           println("success")
           system.terminate()
         case Failure(ex) =>
