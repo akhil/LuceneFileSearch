@@ -5,20 +5,20 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.stream.Materializer
-import com.google.gson.Gson
+import akka.util.ByteString
+//import com.google.gson.Gson
 import desktop.FileSearchRead
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.io.{Source, StdIn}
 
 object WebServer {
   def main(args: Array[String]) {
-
+    import akka.stream.scaladsl._
     implicit val system: ActorSystem = ActorSystem("my-system")
     implicit val materializer: Materializer = Materializer.createMaterializer(system)
     // needed for the future flatMap/onComplete in the end
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-    val gson = new Gson
 
     val route = concat (
       path("hello") {
@@ -27,15 +27,15 @@ object WebServer {
         }
       },
       pathSingleSlash {
-        val searchHtml  = Source.fromResource("search.html").mkString
+        val searchHtml  = scala.io.Source.fromResource("search.html").mkString
         complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, searchHtml))
       },
-      path("search") {
+      path("search.csv") {
         parameter(Symbol("query")) { (query) =>
-        val results = FileSearchRead.getScoreDocs(query, 100000)
-          .map(_.get("email"))
-          .toSet.filter(_ != null).toArray
-        complete(HttpEntity(ContentTypes.`application/json`, gson toJson results))
+          val start = System.currentTimeMillis()
+          val emails = FileSearchRead.getEmails(query, 1000000).map(s => ByteString.fromString(s + "\n"))
+          println(System.currentTimeMillis() - start)
+          complete(HttpEntity(ContentTypes.`text/csv(UTF-8)`, emails))
         }
       }
     )

@@ -11,39 +11,8 @@ import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
 import org.apache.lucene.store.{Directory, FSDirectory}
 import org.apache.tika.metadata.Metadata
 
-import scala.collection.{View, WithFilter}
 import scala.jdk.StreamConverters._
 import scala.util.Try
-
-sealed trait IndexStatus
-case class Indexing(i: Int) extends IndexStatus
-case class IndexComplete(i: Int) extends IndexStatus
-
-class FileIndexer {
-  import FileIndexer._
-  def runIndexer(listeners: List[IndexStatus => Unit]): Unit = {
-    val indexWriter = createIndexWriter()
-    var i = 0
-    generateFiles
-      .map(createDocument)
-      .map(indexWriter.addDocument)
-      .map { _ =>
-        i += 1
-        if(i % 100 == 0) {
-          indexWriter.flush()
-          indexWriter.commit()
-        }
-        Indexing(i)
-      }
-      .foreach(i => listeners.foreach(_ => i))
-    indexWriter.flush()
-    indexWriter.commit()
-    indexWriter.close()
-    listeners.foreach(_ (IndexComplete(i)))
-  }
-
-
-}
 
 object FileIndexer {
   import SearchConfig._
@@ -98,14 +67,5 @@ object FileIndexer {
 
     val stream = new FileInputStream(file.toFile)
     Try(parser.parse(stream, handler, metadata)).map(_ => handler.toString)
-  }
-
-  def main(args: Array[String]): Unit = {
-    val fileIndexer = new FileIndexer
-    def log: IndexStatus => Unit = {
-      case Indexing(i) => if (i % 100 == 0) println(s"$i")
-      case IndexComplete(i) =>println((s"Index complete count: $i"))
-    }
-    fileIndexer.runIndexer(List(log))
   }
 }
