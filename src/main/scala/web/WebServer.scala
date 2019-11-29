@@ -1,20 +1,21 @@
 package web
 
+import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.stream.Materializer
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
-//import com.google.gson.Gson
 import desktop.FileSearchRead
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.io.{Source, StdIn}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.io.StdIn
 
 object WebServer {
-  def main(args: Array[String]) {
-    import akka.stream.scaladsl._
+  def main(args: Array[String]): Unit = {
     implicit val system: ActorSystem = ActorSystem("my-system")
     implicit val materializer: Materializer = Materializer.createMaterializer(system)
     // needed for the future flatMap/onComplete in the end
@@ -33,19 +34,23 @@ object WebServer {
       path("search.csv") {
         parameter(Symbol("query")) { (query) =>
           val start = System.currentTimeMillis()
-          val emails = FileSearchRead.getEmails(query, 1000000).map(s => ByteString.fromString(s + "\n"))
+          val emails = FileSearchRead.getEmails(query, 1000000).filter(_.nonEmpty).map(_.get)
+          val f = emails.runFold(Set.empty[String])(_  + _)
+          val emailSet = Await.result(f, Duration.Inf)
+          println("====> " + emailSet.size)
           println(System.currentTimeMillis() - start)
-          complete(HttpEntity(ContentTypes.`text/csv(UTF-8)`, emails))
+          complete(HttpEntity(ContentTypes.`text/csv(UTF-8)`, emailSet.mkString("\n")))
         }
       }
     )
 
     val bindingFuture = Http().bindAndHandle(route, "0.0.0.0", 8080)
 
-    println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
-    StdIn.readLine() // let it run until user presses return
+    println(s"Server online at http://localhost:8080/")
+    /*StdIn.readLine() // let it run until user presses return
     bindingFuture
       .flatMap(_.unbind()) // trigger unbinding from the port
       .onComplete(_ => system.terminate()) // and shutdown when done
+      */
   }
 }

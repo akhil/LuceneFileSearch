@@ -2,52 +2,29 @@ package desktop
 
 import java.io.FileInputStream
 import java.nio.file.{FileSystems, Files, Path}
-import java.time.LocalDateTime
 
-import desktop.SearchConfig.SCAN_PATH
-import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.document.{Document, Field, TextField}
-import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
-import org.apache.lucene.store.{Directory, FSDirectory}
 import org.apache.tika.metadata.Metadata
 
-import scala.jdk.StreamConverters._
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 object FileIndexer {
-  import SearchConfig._
+  case class Resume(content: Try[String], email: Option[String], fileName: String, filePath: String)
 
-  private val directory: Directory = FSDirectory.open(FileSystems.getDefault.getPath(INDEX_PATH))
-  private val analyzer = new StandardAnalyzer()
+  import SearchConfig.SCAN_PATH
 
   private def dirs: List[Path] = SCAN_PATH.map(FileSystems.getDefault.getPath(_))
 
-  def createIndexWriter(): IndexWriter = {
-    val indexWriterConfig = new IndexWriterConfig(analyzer)
-    val indexWriter = new IndexWriter(directory, indexWriterConfig)
-    indexWriter.deleteAll()
-    indexWriter
-  }
-
   def generateFiles: Iterator[Path] =
-    dirs.map(Files.walk(_).toScala(LazyList)).flatten.iterator.filter(Files.isRegularFile(_))
+    dirs.flatMap(Files.walk(_).iterator.asScala).iterator.filter(Files.isRegularFile(_))
 
-  def createDocument(file: Path): Document = {
-    val document = new Document()
+  def createResume(file: Path): Resume = {
     val fileBody = file2String(file)
-    fileBody.map(fb => document.add(new Field("content", fb, TextField.TYPE_STORED)))
-      .recover {
-        case ex: Exception =>
-          println("===>" + file.toString)
-          ex.printStackTrace()
-      }
-    fileBody.toOption.flatMap(extractEmail).foreach ( email =>
-      document.add(new Field("email", email, TextField.TYPE_STORED))
-     )
-    document.add(new Field("fileName", file.getFileName.toString, TextField.TYPE_STORED))
-    document.add(new Field("filePath", file.toAbsolutePath.toString, TextField.TYPE_STORED))
-    document.add(new Field("updateTime", file.toFile.lastModified.toString, TextField.TYPE_STORED))
-    document
+    Resume(content = fileBody,
+      email = fileBody.map(extractEmail).toOption.flatten,
+      fileName = file.getFileName.toString,
+      filePath = file.toAbsolutePath.toString
+    )
   }
 
   def extractEmail(content: String): Option[String] = {
@@ -64,7 +41,6 @@ object FileIndexer {
     val handler = new BodyContentHandler
     val parser = new AutoDetectParser
     val metadata = new Metadata
-
     val stream = new FileInputStream(file.toFile)
     Try(parser.parse(stream, handler, metadata)).map(_ => handler.toString)
   }

@@ -14,7 +14,6 @@ import org.apache.lucene.store.FSDirectory
 import stream.Deduplicate
 
 import scala.concurrent.Future
-
 object FileSearchRead {
 
   //val keyWord = "java AND spring"
@@ -28,10 +27,10 @@ object FileSearchRead {
   private val fields = Array("fileName", "content")
   private val clauses = Array(BooleanClause.Occur.SHOULD, BooleanClause.Occur.SHOULD)
 
-  def getScoreDocs(keyWord: String, n: Int): Iterator[ScoreDoc] = {
+  def getScoreDocs(keyWord: String, n: Int): List[ScoreDoc] = {
     val multiFieldQuery = MultiFieldQueryParser.parse(keyWord, fields, clauses, analyzer)
     val topDocs = indexSearcher.search(multiFieldQuery, n)
-    val scoreDocs = topDocs.scoreDocs.iterator
+    val scoreDocs = topDocs.scoreDocs.toList
     println("ScoreDocs: " + scoreDocs.length)
     scoreDocs
     /*
@@ -44,17 +43,17 @@ object FileSearchRead {
     //documents
   }
 
-  import scala.jdk.CollectionConverters._
-  def getDoc(docId: Int): Document = indexSearcher.doc(docId, Set("email").asJava)
+  def getDoc(docId: Int): Document =
+    indexSearcher.doc(docId)
 
   import akka.stream.scaladsl._
-  def getEmails(keyWord: String, n: Int)(implicit system: ActorSystem): Source[String, NotUsed] = {
+  def getEmails(keyWord: String, n: Int)(implicit system: ActorSystem): Source[Option[String], NotUsed] = {
     import system.dispatcher
-    Source.fromIterator(() => getScoreDocs(keyWord, n))
-      .mapAsync(5)(doc => Future(getDoc(doc.doc).get("email")))
+    Source(getScoreDocs(keyWord, n))
+      .mapAsync(10) {doc =>
+        Future(getDoc(doc.doc)).map(_.get("email")).map(Option(_))
+      }
       .via(Deduplicate())
   }
-  //println(getScoreDocs("a").map(_.get("email")).toSet.size)
-
 
 }

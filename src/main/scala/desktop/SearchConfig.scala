@@ -1,7 +1,7 @@
 package desktop
 
 import com.typesafe.config.ConfigFactory
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 
 object SearchConfig {
   private lazy val config = ConfigFactory.load()
